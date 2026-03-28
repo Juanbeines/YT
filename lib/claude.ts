@@ -33,21 +33,35 @@ INSTRUCCIONES:
 - Si el video no tiene contenido relacionado con publicidad, indica que el video no contiene información sobre ads.`;
 
 export async function generateAdSummary(transcript: string): Promise<string> {
-  const model = genAI.getGenerativeModel({
-    model: "gemini-2.0-flash",
-    systemInstruction: SYSTEM_PROMPT,
-  });
+  const models = ["gemini-2.0-flash", "gemini-2.0-flash-lite"];
 
-  const result = await model.generateContent(
-    `Analiza el siguiente transcript de un video de YouTube y genera un resumen estructurado sobre cómo hacer ADs:\n\n${transcript}`
-  );
+  for (const modelName of models) {
+    try {
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        systemInstruction: SYSTEM_PROMPT,
+      });
 
-  const response = result.response;
-  const text = response.text();
+      const result = await model.generateContent(
+        `Analiza el siguiente transcript de un video de YouTube y genera un resumen estructurado sobre cómo hacer ADs:\n\n${transcript}`
+      );
 
-  if (!text) {
-    throw new Error("No se recibió respuesta de Gemini");
+      const text = result.response.text();
+      if (!text) continue;
+      return text;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "";
+      if (msg.includes("429") || msg.includes("quota")) {
+        if (modelName === models[models.length - 1]) {
+          throw new Error(
+            "Se alcanzó el límite de requests de Gemini. Esperá un minuto e intentá de nuevo."
+          );
+        }
+        continue;
+      }
+      throw error;
+    }
   }
 
-  return text;
+  throw new Error("No se pudo generar el resumen.");
 }

@@ -1,4 +1,10 @@
-import { getSubtitles } from "youtube-captions-scraper";
+import { execFile } from "child_process";
+import { promisify } from "util";
+import { readFile, unlink } from "fs/promises";
+import { tmpdir } from "os";
+import { join } from "path";
+
+const execFileAsync = promisify(execFile);
 
 export function extractVideoId(url: string): string | null {
   const patterns = [
@@ -16,22 +22,71 @@ export function extractVideoId(url: string): string | null {
 }
 
 export async function fetchTranscript(videoId: string): Promise<string> {
-  const languages = ["en", "es", "pt", "fr", "de"];
+  const tmpFile = join(tmpdir(), `yt-transcript-${videoId}`);
+  const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
 
-  for (const lang of languages) {
-    try {
-      const captions = await getSubtitles({ videoID: videoId, lang });
-      if (captions.length > 0) {
-        return captions.map((c) => c.text).join(" ");
+  try {
+    // Run yt-dlp - it may exit with error code even if some subs downloaded
+    await execFileAsync("/usr/local/bin/python3.12", [
+      "-m",
+      "yt_dlp",
+      "--write-auto-sub",
+      "--sub-lang",
+      "en",
+      "--skip-download",
+      "--sub-format",
+      "srv1",
+      "-o",
+      tmpFile,
+      videoUrl,
+    ], { timeout: 30000 }).catch(() => {});
+
+    // Check if subtitle file was downloaded
+    let xml = "";
+    for (const lang of ["en", "es"]) {
+      const filePath = `${tmpFile}.${lang}.srv1`;
+      try {
+        xml = await readFile(filePath, "utf-8");
+        await unlink(filePath).catch(() => {});
+        if (xml.length > 0) break;
+      } catch {
+        continue;
       }
-    } catch {
-      continue;
     }
-  }
 
-  throw new Error(
-    "Este video no tiene subtítulos disponibles. Probá con otro video que tenga subtítulos o subtítulos auto-generados activados."
-  );
+    if (!xml) {
+      throw new Error(
+        "No se encontraron subtítulos para este video."
+      );
+    }
+
+    // Parse XML and extract text
+    const textMatches = [...xml.matchAll(/<text[^>]*>(.*?)<\/text>/gs)];
+    const transcript = textMatches
+      .map((m) =>
+        m[1]
+          .replace(/&amp;/g, "&")
+          .replace(/&lt;/g, "<")
+          .replace(/&gt;/g, ">")
+          .replace(/&quot;/g, '"')
+          .replace(/&#39;/g, "'")
+          .replace(/\n/g, " ")
+      )
+      .join(" ");
+
+    if (!transcript) {
+      throw new Error("No se pudo extraer el texto de los subtítulos.");
+    }
+
+    return transcript;
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("No se")) {
+      throw error;
+    }
+    throw new Error(
+      "No se pudieron obtener los subtítulos de este video."
+    );
+  }
 }
 
 export async function fetchVideoTitle(videoId: string): Promise<string> {
