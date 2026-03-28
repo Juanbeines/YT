@@ -16,8 +16,30 @@ export function extractVideoId(url: string): string | null {
 }
 
 export async function fetchTranscript(videoId: string): Promise<string> {
-  const transcript = await YoutubeTranscript.fetchTranscript(videoId);
-  return transcript.map((item) => item.text).join(" ");
+  const languages = ["es", "en", "pt", "fr"];
+
+  for (const lang of languages) {
+    try {
+      const transcript = await YoutubeTranscript.fetchTranscript(videoId, {
+        lang,
+      });
+      if (transcript.length > 0) {
+        return transcript.map((item) => item.text).join(" ");
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  // Last attempt without language preference
+  try {
+    const transcript = await YoutubeTranscript.fetchTranscript(videoId);
+    return transcript.map((item) => item.text).join(" ");
+  } catch {
+    throw new Error(
+      "Este video no tiene subtítulos disponibles. Probá con otro video que tenga subtítulos o subtítulos auto-generados activados."
+    );
+  }
 }
 
 export async function fetchVideoTitle(videoId: string): Promise<string> {
