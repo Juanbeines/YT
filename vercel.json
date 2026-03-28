@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/py_transcript.py": {
+      "runtime": "@vercel/python@4.5.0"
+    }
+  }
+}
