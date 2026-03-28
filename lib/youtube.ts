@@ -1,4 +1,4 @@
-import { YoutubeTranscript } from "youtube-transcript";
+import { getSubtitles } from "youtube-captions-scraper";
 
 export function extractVideoId(url: string): string | null {
   const patterns = [
@@ -16,30 +16,22 @@ export function extractVideoId(url: string): string | null {
 }
 
 export async function fetchTranscript(videoId: string): Promise<string> {
-  const languages = ["es", "en", "pt", "fr"];
+  const languages = ["en", "es", "pt", "fr", "de"];
 
   for (const lang of languages) {
     try {
-      const transcript = await YoutubeTranscript.fetchTranscript(videoId, {
-        lang,
-      });
-      if (transcript.length > 0) {
-        return transcript.map((item) => item.text).join(" ");
+      const captions = await getSubtitles({ videoID: videoId, lang });
+      if (captions.length > 0) {
+        return captions.map((c) => c.text).join(" ");
       }
     } catch {
       continue;
     }
   }
 
-  // Last attempt without language preference
-  try {
-    const transcript = await YoutubeTranscript.fetchTranscript(videoId);
-    return transcript.map((item) => item.text).join(" ");
-  } catch {
-    throw new Error(
-      "Este video no tiene subtítulos disponibles. Probá con otro video que tenga subtítulos o subtítulos auto-generados activados."
-    );
-  }
+  throw new Error(
+    "Este video no tiene subtítulos disponibles. Probá con otro video que tenga subtítulos o subtítulos auto-generados activados."
+  );
 }
 
 export async function fetchVideoTitle(videoId: string): Promise<string> {
