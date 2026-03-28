@@ -1,6 +1,6 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const client = new Anthropic();
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
 const SYSTEM_PROMPT = `Eres un experto en publicidad digital y marketing. Tu tarea es analizar transcripts de videos de YouTube y generar un resumen estructurado enfocado EXCLUSIVAMENTE en cómo hacer ADs (publicidad).
 
@@ -33,21 +33,21 @@ INSTRUCCIONES:
 - Si el video no tiene contenido relacionado con publicidad, indica que el video no contiene información sobre ads.`;
 
 export async function generateAdSummary(transcript: string): Promise<string> {
-  const message = await client.messages.create({
-    model: "claude-opus-4-20250918",
-    max_tokens: 4096,
-    system: SYSTEM_PROMPT,
-    messages: [
-      {
-        role: "user",
-        content: `Analiza el siguiente transcript de un video de YouTube y genera un resumen estructurado sobre cómo hacer ADs:\n\n${transcript}`,
-      },
-    ],
+  const model = genAI.getGenerativeModel({
+    model: "gemini-2.0-flash",
+    systemInstruction: SYSTEM_PROMPT,
   });
 
-  const block = message.content[0];
-  if (block.type === "text") {
-    return block.text;
+  const result = await model.generateContent(
+    `Analiza el siguiente transcript de un video de YouTube y genera un resumen estructurado sobre cómo hacer ADs:\n\n${transcript}`
+  );
+
+  const response = result.response;
+  const text = response.text();
+
+  if (!text) {
+    throw new Error("No se recibió respuesta de Gemini");
   }
-  throw new Error("Unexpected response format from Claude");
+
+  return text;
 }
